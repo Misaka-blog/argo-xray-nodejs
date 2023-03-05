@@ -48,7 +48,7 @@ app.get("/list", function (req, res) {
       res.type("html").send("<pre>命令行执行错误：\n" + err + "</pre>");
     }
     else {
-      res.type("html").send("<pre>节点数据：\n\n" + stdout + "</pre>");
+      res.type("html").send(stdout);
     }
   });
 });

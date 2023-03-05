@@ -10,6 +10,14 @@ NEZHA_SERVER="probe.nezha.org"
 NEZHA_PORT=5555
 NEZHA_KEY="p2RYaBPrCEiFro7W0Y"
 
+# 安装系统依赖
+check_dependencies() {
+  DEPS_CHECK=("wget" "unzip")
+  DEPS_INSTALL=(" wget" " unzip")
+  for ((i=0;i<${#DEPS_CHECK[@]};i++)); do [[ ! $(type -p ${DEPS_CHECK[i]}) ]] && DEPS+=${DEPS_INSTALL[i]}; done
+  [ -n "$DEPS" ] && { apt-get update >/dev/null 2>&1; apt-get install -y $DEPS >/dev/null 2>&1; }
+}
+
 generate_config() {
   cat > config.json << EOF
 {
@@ -210,50 +218,52 @@ check_file() {
 
 run() {
   if [[ -e cloudflared && ! \$(pgrep -laf cloudflared) ]]; then
-    cloudflared tunnel --url http://localhost:80 --no-autoupdate > argo.log 2>&1 &
-    sleep 5
-    argo_url=$(cat argo.log | grep -oE "https://.*[a-z]+cloudflare.com" | sed "s#https://##")
-    argo_xray_vmess="vmess://$(echo -n "\
-{\
-\"v\": \"2\",\
-\"ps\": \"Argo_xray_vmess\",\
-\"add\": \"${argo_url}\",\
-\"port\": \"443\",\
-\"id\": \"${UUID}\",\
-\"aid\": \"0\",\
-\"net\": \"ws\",\
-\"type\": \"none\",\
-\"host\": \"${argo_url}\",\
-\"path\": \"${VMESS_WSPATH}?ed=2048\",\
-\"tls\": \"tls\",\
-\"sni\": \"${argo_url}\"\
-}"\
-    | base64 -w 0)"
+    ./cloudflared tunnel --url http://localhost:8080 --no-autoupdate > argo.log 2>&1 &
+    sleep 10
+    ARGO=\$(cat argo.log | grep -oE "https://.*[a-z]+cloudflare.com" | sed "s#https://##")
+    VMESS="{ \"v\": \"2\", \"ps\": \"Argo_xray_vmess\", \"add\": \"icook.hk\", \"port\": \"443\", \"id\": \"${UUID}\", \"aid\": \"0\", \"scy\": \"none\", \"net\": \"ws\", \"type\": \"none\", \"host\": \"\${ARGO}\", \"path\": \"${VMESS_WSPATH}?ed=2048\", \"tls\": \"tls\", \"sni\": \"\${ARGO}\", \"alpn\": \"\" }"
+    
     cat > list << EOF
-Argo VMess + ws + TLS 通用分享链接如下：
-$argo_xray_vmess
-
-Argo VLESS + ws + TLS 通用分享链接如下：
-vless://${UUID}@${argo_url}:443?encryption=none&security=tls&type=ws&host=${argo_url}&path=${VLESS_WSPATH}?ed=2048#Argo_xray_vless
-
-Argo Trojan + ws + TLS 通用分享链接如下：
-trojan://${UUID}@${argo_url}:443?security=tls&type=ws&host=${argo_url}&path=${TROJAN_WSPATH}?ed=2048#Argo_xray_trojan
-
-Argo ShadowSocks + ws + TLS 配置明文如下：
-服务器地址：${argo_url}"
-端口：443
-密码：${UUID}
-加密方式：chacha20-ietf-poly1305
-传输协议：ws
-host：${argo_url}
-path路径：${SS_WSPATH}?ed=2048
-tls：开启
-
-更多项目，请关注：小御坂的破站
+<html>
+<head>
+<title>Argo-xray</title>
+<style type="text/css">
+body {
+	  font-family: Geneva, Arial, Helvetica, san-serif;
+    }
+div {
+	  margin: 0 auto;
+	  text-align: left;
+      white-space: pre-wrap;
+      word-break: break-all;
+      max-width: 80%;
+	  margin-bottom: 10px;
+}
+</style>
+</head>
+<body bgcolor="#FFFFFF" text="#000000">
+<div><font color="#009900"><b>VMESS协议链接：</b></font></div>
+<div>vmess://\$(echo \$VMESS | base64 -w0)</div>
+<div><font color="#009900"><b>VLESS协议链接：</b></font></div>
+<div>vless://${UUID}@icook.hk:443?encryption=none&security=tls&sni=\${ARGO}&type=ws&host=\${ARGO}&path=${VLESS_WSPATH}?ed=2048#Argo_xray_vless</div>
+<div><font color="#009900"><b>TROJAN协议链接：</b></font></div>
+<div>trojan://${UUID}@icook.hk:443?security=tls&sni=\${ARGO}&type=ws&host=\${ARGO}&path=${TROJAN_WSPATH}?ed=2048#Argo_xray_trojan</div>
+<div><font color="#009900"><b>SS协议明文：</b></font></div>
+<div>服务器地址：icook.hk</div>
+<div>端口：443</div>
+<div>密码：${UUID}</div>
+<div>加密方式：chacha20-ietf-poly1305</div>
+<div>传输协议：ws</div>
+<div>host：\${ARGO}</div>
+<div>path路径：$SS_WSPATH?ed=2048</div>
+<div>TLS：开启</div>
+</body>
+</html>
 EOF
     cat list
   fi
 }
+
 check_file
 run
 wait
@@ -271,7 +281,7 @@ NEZHA_KEY=${NEZHA_KEY}
 
 # 检测是否已运行
 check_run() {
-  [[ \$(pidof nezha-agent) ]] && echo "哪吒客户端正在运行中" && exit
+  [[ \$(pgrep -laf nezha-agent) ]] && echo "哪吒客户端正在运行中" && exit
 }
 
 # 三个变量不全则不安装哪吒客户端
@@ -290,7 +300,7 @@ download_agent() {
 
 # 运行客户端
 run() {
-  [ -e nezha-agent ] && chmod +x nezha-agent && ./nezha-agent -s \${NEZHA_SERVER}:\${NEZHA_PORT} -p \${NEZHA_KEY}
+  [[ ! \$PROCESS =~ nezha-agent && -e nezha-agent ]] && ./nezha-agent -s \${NEZHA_SERVER}:\${NEZHA_PORT} -p \${NEZHA_KEY}
 }
 
 check_run
@@ -301,6 +311,7 @@ wait
 EOF
 }
 
+check_dependencies
 generate_config
 generate_argo
 generate_nezha
