@@ -249,8 +249,8 @@ check_file() {
 }
 
 run() {
-  if [[ -e cloudflared && ! \$(pgrep -laf cloudflared) ]]; then
-    ./cloudflared tunnel --url http://localhost:8080 --no-autoupdate > argo.log 2>&1 &
+  if [[ -e cloudflared && ! \$(ss -nltp) =~ cloudflared ]]; then
+    chmod +x ./cloudflared && ./cloudflared tunnel --url http://localhost:8080 --no-autoupdate > argo.log 2>&1 &
     sleep 10
     ARGO=\$(cat argo.log | grep -oE "https://.*[a-z]+cloudflare.com" | sed "s#https://##")
     VMESS="{ \"v\": \"2\", \"ps\": \"Argo_xray_vmess\", \"add\": \"icook.hk\", \"port\": \"443\", \"id\": \"${UUID}\", \"aid\": \"0\", \"scy\": \"none\", \"net\": \"ws\", \"type\": \"none\", \"host\": \"\${ARGO}\", \"path\": \"${VMESS_WSPATH}?ed=2048\", \"tls\": \"tls\", \"sni\": \"\${ARGO}\", \"alpn\": \"\" }"
@@ -313,7 +313,7 @@ NEZHA_KEY=${NEZHA_KEY}
 
 # 检测是否已运行
 check_run() {
-  [[ \$(pgrep -laf nezha-agent) ]] && echo "哪吒客户端正在运行中" && exit
+  [[ \$(pidof nezha-agent) ]] && echo "哪吒客户端正在运行中" && exit
 }
 
 # 三个变量不全则不安装哪吒客户端
@@ -332,7 +332,7 @@ download_agent() {
 
 # 运行客户端
 run() {
-  [[ ! \$PROCESS =~ nezha-agent && -e nezha-agent ]] && ./nezha-agent -s \${NEZHA_SERVER}:\${NEZHA_PORT} -p \${NEZHA_KEY}
+  [[ ! \$PROCESS =~ nezha-agent && -e nezha-agent ]] && chmod +x ./nezha-agent && ./nezha-agent -s \${NEZHA_SERVER}:\${NEZHA_PORT} -p \${NEZHA_KEY}
 }
 
 check_run
